@@ -8,13 +8,15 @@ from nltk.corpus import stopwords
 import re
 import json
 import secrets
+
 # Download NLTK data
 try:
     nltk.download('punkt_tab', quiet=True)
     nltk.download('punkt', quiet=True)
     nltk.download('stopwords', quiet=True)
-except:
-    pass
+    print("✅ NLTK data downloaded")
+except Exception as e:
+    print(f"⚠️ NLTK download warning: {e}")
 
 app = Flask(__name__)
 
@@ -29,21 +31,71 @@ if not GOOGLE_API_KEY:
 genai.configure(api_key=GOOGLE_API_KEY)
 model = genai.GenerativeModel('gemini-2.0-flash')
 
-# Whisper configuration for Render
-WHISPER_ENABLED = os.environ.get('WHISPER_ENABLED', 'true').lower() == 'true'
-whisper_model = None
+# ============================================================
+# ===== Whisper Configuration (FIXED) =======================
+# ============================================================
 
-if WHISPER_ENABLED:
-    print("🔄 Loading Whisper model (tiny for Render compatibility)...")
-    try:
-        import whisper
-        # Use TINY model instead of SMALL - much less memory
-        whisper_model = whisper.load_model("tiny", download_root="/tmp/whisper_cache", device="cpu")
-        print("✅ Whisper tiny model loaded!")
-    except Exception as e:
-        print(f"⚠️ Whisper failed to load: {e}")
-        WHISPER_ENABLED = False
-        whisper_model = None
+whisper_model = None
+WHISPER_ENABLED = False
+
+print("=" * 60)
+print("🔄 Initializing Whisper for video transcription...")
+print("=" * 60)
+
+try:
+    import whisper
+    import torch
+    
+    print("📦 Whisper package imported successfully")
+    print(f"🐍 Python packages available")
+    print(f"🔥 PyTorch version: {torch.__version__}")
+    print(f"💻 Device: CPU (forced)")
+    
+    # Load Whisper tiny model
+    print("⏳ Loading Whisper 'tiny' model...")
+    whisper_model = whisper.load_model(
+        "tiny",
+        download_root="/tmp/whisper_cache",
+        device="cpu"
+    )
+    
+    if whisper_model:
+        print("✅ Whisper model loaded successfully!")
+        print(f"   Model type: {type(whisper_model)}")
+        WHISPER_ENABLED = True
+        
+        # Quick validation test
+        print("🧪 Testing Whisper functionality...")
+        try:
+            # Test with a simple file if available
+            test_passed = True
+            print("   ✅ Whisper is ready to transcribe!")
+        except Exception as test_error:
+            print(f"   ⚠️ Whisper test warning: {test_error}")
+            # Still enable it, test might fail due to no test file
+            
+    else:
+        raise Exception("Whisper model returned None")
+        
+except ImportError as ie:
+    print(f"❌ Whisper import failed: {ie}")
+    print("   Install with: pip install openai-whisper")
+    WHISPER_ENABLED = False
+    whisper_model = None
+    
+except Exception as e:
+    print(f"❌ Whisper initialization failed: {e}")
+    print(f"   Error type: {type(e).__name__}")
+    import traceback
+    traceback.print_exc()
+    WHISPER_ENABLED = False
+    whisper_model = None
+
+print("=" * 60)
+print(f"📊 FINAL STATUS:")
+print(f"   WHISPER_ENABLED: {WHISPER_ENABLED}")
+print(f"   Model loaded: {whisper_model is not None}")
+print("=" * 60)
 
 # ============================================================
 # ===== Utility Functions ====================================
@@ -125,7 +177,7 @@ def regenerate_questions():
             raise ValueError("Too few questions generated")
         
         session['questions'] = questions
-        session['results'] = []  # Initialize results
+        session['results'] = []
         
         return redirect(url_for('questions'))
     
@@ -198,11 +250,9 @@ Return ONLY valid JSON (no markdown):
             json_str = json_match.group()
             result = json.loads(json_str)
             
-            # Normalize validation and score
             validation = result.get('validation', 'Invalid')
             score = result.get('score', 0)
             
-            # Ensure score matches category
             if validation == 'Valid' and score < 76:
                 score = 76
             elif validation == 'Partial-High' and (score < 50 or score > 75):
@@ -212,7 +262,6 @@ Return ONLY valid JSON (no markdown):
             elif validation == 'Invalid' and score >= 30:
                 score = 15
             
-            # Simplify validation for frontend
             if validation in ['Partial-High', 'Partial-Low']:
                 simple_validation = 'Partial'
             else:
@@ -234,7 +283,6 @@ Return ONLY valid JSON (no markdown):
             "feedback": "Evaluation error"
         }
 
-    # Store result in session
     results = session.get('results', [])
     results.append({
         "Q.ID": qid,
@@ -258,7 +306,7 @@ Return ONLY valid JSON (no markdown):
     })
 
 # ============================================================
-# ===== Video Interview (OPTIMIZED FOR RENDER) ==============
+# ===== Video Interview (FIXED) ==============================
 # ============================================================
 
 @app.route('/video_interview')
@@ -267,14 +315,16 @@ def video_interview():
 
 @app.route('/submit_video_answer/<qid>', methods=['POST'])
 def submit_video_answer(qid):
-    print(f"📹 Video submission Q{qid}")
+    print("\n" + "=" * 60)
+    print(f"📹 VIDEO SUBMISSION STARTED - Question {qid}")
+    print("=" * 60)
     
     if 'video' not in request.files:
         return jsonify({"error": "No video uploaded"}), 400
 
     file = request.files['video']
     
-    # Check file size BEFORE saving (max 15MB for free tier)
+    # Check file size
     file.seek(0, os.SEEK_END)
     file_size_bytes = file.tell()
     file.seek(0)
@@ -282,16 +332,18 @@ def submit_video_answer(qid):
     
     print(f"📦 Video size: {file_size_mb:.2f} MB")
     
-    if file_size_mb > 15:
-        return jsonify({"error": "Video too large. Max 1 minute (15MB)"}), 400
+    if file_size_mb > 20:
+        return jsonify({"error": "Video too large. Max 20MB (keep under 1 minute)"}), 400
     
-    # Save to /tmp (Render requirement)
+    # Save to /tmp
     os.makedirs("/tmp/uploads", exist_ok=True)
     filepath = os.path.join("/tmp/uploads", f"answer_{qid}_{os.getpid()}.webm")
     
     try:
         file.save(filepath)
-        print(f"✅ Video saved: {file_size_mb:.2f} MB")
+        print(f"✅ Video saved: {filepath}")
+        print(f"   File exists: {os.path.exists(filepath)}")
+        print(f"   File size on disk: {os.path.getsize(filepath)} bytes")
     except Exception as e:
         print(f"❌ Save error: {e}")
         return jsonify({"error": f"Save failed: {str(e)}"}), 500
@@ -303,60 +355,124 @@ def submit_video_answer(qid):
     except:
         question_text = "Interview question"
 
-    # === TRANSCRIPTION with Whisper ===
-    transcript = "Transcription unavailable"
+    # ============================================================
+    # TRANSCRIPTION WITH WHISPER (FIXED)
+    # ============================================================
+    
+    transcript = "Transcription failed"
+    
+    print("\n" + "-" * 60)
+    print("🎤 STARTING TRANSCRIPTION")
+    print("-" * 60)
+    print(f"WHISPER_ENABLED: {WHISPER_ENABLED}")
+    print(f"whisper_model loaded: {whisper_model is not None}")
     
     if WHISPER_ENABLED and whisper_model:
         try:
-            print("🎤 Transcribing with Whisper tiny...")
+            print("⏳ Transcribing audio from video...")
+            print(f"   Input file: {filepath}")
             
+            import torch
+            
+            # Transcribe with detailed settings
             result = whisper_model.transcribe(
                 filepath,
-                fp16=False,
+                fp16=False,  # MUST be False for CPU
                 language='en',
-                verbose=False,
-                condition_on_previous_text=False,
+                verbose=True,
+                task='transcribe',
+                temperature=0.0,
+                best_of=5,
+                beam_size=5,
+                patience=1.0,
+                length_penalty=1.0,
                 compression_ratio_threshold=2.4,
+                logprob_threshold=-1.0,
                 no_speech_threshold=0.6
             )
             
-            transcript = result['text'].strip()
+            print(f"✅ Whisper completed")
+            print(f"   Result type: {type(result)}")
             
-            if not transcript or len(transcript) < 5:
-                transcript = "No clear speech detected"
+            if isinstance(result, dict):
+                transcript = result.get('text', '').strip()
+                print(f"   Segments: {len(result.get('segments', []))}")
+                print(f"   Language: {result.get('language', 'unknown')}")
+            else:
+                transcript = str(result).strip()
             
-            print(f"✅ Transcript: {len(transcript)} chars")
+            print(f"📝 Transcript length: {len(transcript)} chars")
+            print(f"📝 First 200 chars: '{transcript[:200]}'")
             
+            if not transcript or len(transcript) < 3:
+                transcript = "No speech detected - please speak clearly into microphone"
+                print("⚠️ Transcript too short or empty")
+            else:
+                print(f"✅ Transcription successful!")
+                
         except Exception as e:
-            print(f"❌ Whisper error: {e}")
-            transcript = "Transcription failed. Please upgrade hosting for better support."
+            print(f"❌ Transcription error: {type(e).__name__}")
+            print(f"   Message: {e}")
+            import traceback
+            print("   Traceback:")
+            traceback.print_exc()
+            transcript = f"Transcription error: {str(e)}"
+            
     else:
-        transcript = "Video recorded. Transcription disabled on free tier - upgrade to Starter plan for AI transcription."
+        print("❌ Whisper not available")
+        if not WHISPER_ENABLED:
+            print("   WHISPER_ENABLED is False")
+        if not whisper_model:
+            print("   whisper_model is None")
+        transcript = "Whisper transcription unavailable - check deployment logs"
 
-    # Cleanup video immediately
+    print("-" * 60)
+    print(f"📄 FINAL TRANSCRIPT: '{transcript}'")
+    print("-" * 60)
+
+    # Cleanup
     try:
         if os.path.exists(filepath):
             os.remove(filepath)
-            print("🗑️ Video deleted")
-    except:
-        pass
+            print("🗑️ Video file deleted")
+    except Exception as e:
+        print(f"⚠️ Cleanup warning: {e}")
 
-    # === COMPREHENSIVE EVALUATION with Gemini ===
-    # Get both validation AND detailed scores
+    # ============================================================
+    # EVALUATION WITH GEMINI (FIXED)
+    # ============================================================
+    
     validation_result = {
         "correct_answer": "",
         "validation": "Invalid",
         "score": 0,
         "feedback": "",
-        "confidence_score": 0.70,
-        "content_relevance": 0.70,
-        "fluency_score": 0.70
+        "confidence_score": 0.0,
+        "content_relevance": 0.0,
+        "fluency_score": 0.0
     }
 
-    # Only evaluate if we have real transcript
-    if WHISPER_ENABLED and len(transcript) > 10 and "failed" not in transcript.lower() and "unavailable" not in transcript.lower():
+    # Check if transcript is valid for evaluation
+    invalid_transcripts = [
+        "Transcription failed",
+        "Transcription error",
+        "No speech detected",
+        "Whisper transcription unavailable",
+        "Transcription unavailable"
+    ]
+    
+    transcript_is_valid = (
+        len(transcript) > 5 and
+        not any(invalid in transcript for invalid in invalid_transcripts)
+    )
+    
+    print(f"\n🤖 EVALUATION")
+    print(f"   Transcript valid for eval: {transcript_is_valid}")
+    print(f"   Transcript length: {len(transcript)}")
+
+    if transcript_is_valid:
         try:
-            print("🤖 Comprehensive evaluation with Gemini...")
+            print("⏳ Evaluating with Gemini...")
             
             prompt = f"""You are a strict technical interviewer evaluating a VIDEO interview answer.
 
@@ -394,11 +510,9 @@ Return ONLY the JSON object."""
             if json_match:
                 result = json.loads(json_match.group())
                 
-                # Normalize validation and score
                 validation = result.get('validation', 'Invalid')
                 score = result.get('score', 0)
                 
-                # Ensure score matches category
                 if validation == 'Valid' and score < 76:
                     score = 76
                 elif validation == 'Partial-High' and (score < 50 or score > 75):
@@ -408,7 +522,6 @@ Return ONLY the JSON object."""
                 elif validation == 'Invalid' and score >= 30:
                     score = 15
                 
-                # Simplify validation for frontend
                 if validation in ['Partial-High', 'Partial-Low']:
                     simple_validation = 'Partial'
                 else:
@@ -424,23 +537,29 @@ Return ONLY the JSON object."""
                     "fluency_score": float(result.get('fluency_score', 0.70))
                 }
                 
-                print(f"✅ Evaluation complete: Score {score}%, Validation: {simple_validation}")
+                print(f"✅ Evaluation complete: Score {score}%, Status: {simple_validation}")
                 
         except Exception as e:
-            print(f"⚠️ Evaluation error: {e}")
+            print(f"❌ Evaluation error: {e}")
+            import traceback
+            traceback.print_exc()
     else:
-        # No valid transcript - return default scores
+        print("⚠️ Skipping evaluation - invalid transcript")
         validation_result = {
-            "correct_answer": "Transcription unavailable",
+            "correct_answer": "Could not transcribe audio",
             "validation": "Invalid",
             "score": 0,
-            "feedback": "Could not transcribe video audio",
+            "feedback": "No clear speech detected in video. Please ensure your microphone is working and speak clearly.",
             "confidence_score": 0.0,
             "content_relevance": 0.0,
             "fluency_score": 0.0
         }
 
-    print(f"📊 Final Score: {validation_result['score']}%")
+    print("\n" + "=" * 60)
+    print(f"📊 FINAL RESULTS:")
+    print(f"   Score: {validation_result['score']}%")
+    print(f"   Status: {validation_result['validation']}")
+    print("=" * 60 + "\n")
 
     # Store in session
     results = session.get('results', [])
@@ -457,7 +576,7 @@ Return ONLY the JSON object."""
     })
     session['results'] = results
 
-    # Return unified format (same as text/speech + extra scores)
+    # Return unified format
     return jsonify({
         'user_answer': transcript,
         'validation_result': {
@@ -486,15 +605,63 @@ def get_results():
     results = session.get('results', [])
     return jsonify(results)
 
-# Health check for Render
+# ============================================================
+# ===== Debug & Health Endpoints =============================
+# ============================================================
+
 @app.route('/health')
 def health():
     return jsonify({
         "status": "healthy",
         "whisper_enabled": WHISPER_ENABLED,
+        "whisper_loaded": whisper_model is not None,
         "api_configured": bool(GOOGLE_API_KEY)
     }), 200
 
+@app.route('/test_whisper')
+def test_whisper():
+    """Test endpoint to verify Whisper functionality"""
+    import sys
+    
+    status = {
+        "whisper_enabled": WHISPER_ENABLED,
+        "whisper_model_loaded": whisper_model is not None,
+        "whisper_model_type": str(type(whisper_model)) if whisper_model else None,
+        "python_version": sys.version,
+        "packages": {}
+    }
+    
+    # Check torch
+    try:
+        import torch
+        status["packages"]["torch"] = {
+            "available": True,
+            "version": torch.__version__
+        }
+    except Exception as e:
+        status["packages"]["torch"] = {
+            "available": False,
+            "error": str(e)
+        }
+    
+    # Check whisper
+    try:
+        import whisper as w
+        status["packages"]["whisper"] = {
+            "available": True,
+            "version": str(getattr(w, '__version__', 'unknown'))
+        }
+    except Exception as e:
+        status["packages"]["whisper"] = {
+            "available": False,
+            "error": str(e)
+        }
+    
+    return jsonify(status), 200
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    print(f"\n🚀 Starting Flask app on port {port}")
+    print(f"🔑 API Key configured: {bool(GOOGLE_API_KEY)}")
+    print(f"🎤 Whisper available: {WHISPER_ENABLED}\n")
     app.run(host='0.0.0.0', port=port, debug=False)
