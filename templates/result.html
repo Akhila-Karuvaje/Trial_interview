@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview Results - Skill Sync</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            background: linear-gradient(135deg, #56d8ff, #457b9d, #a8dadc, #e63946);
+            background-size: 300% 300%;
+            animation: gradientCycle 15s ease infinite;
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        @keyframes gradientCycle {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.2em;
+            text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5);
+            margin-bottom: 30px;
+            animation: fadeInDown 1s ease-out;
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .result-card {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            border: 3px solid #f39c12;
+            animation: blinkBorder 2s infinite, fadeInUp 1s ease-out;
+            margin-bottom: 25px;
+        }
+
+        @keyframes blinkBorder {
+            0%, 100% { border-color: #f39c12; }
+            50% { border-color: transparent; }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .question-section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            border-left: 5px solid #e63946;
+        }
+
+        .question-text {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #56d8ff;
+            margin-bottom: 10px;
+        }
+
+        .answer-section {
+            margin-bottom: 20px;
+        }
+
+        .answer-label {
+            font-size: 1em;
+            font-weight: bold;
+            color: #f39c12;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .answer-text {
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 0.95em;
+            line-height: 1.4;
+            border-left: 4px solid #2a9d8f;
+            word-wrap: break-word;
+        }
+
+        .validation-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .validation-item {
+            background: linear-gradient(135deg, rgba(42, 157, 143, 0.8), rgba(38, 70, 83, 0.8));
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .validation-item:hover {
+            transform: translateY(-3px);
+        }
+
+        .validation-item.valid {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.8), rgba(22, 163, 74, 0.8));
+        }
+
+        .validation-item.partial {
+            background: linear-gradient(135deg, rgba(251, 191, 36, 0.8), rgba(245, 158, 11, 0.8));
+        }
+
+        .validation-item.invalid {
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.8), rgba(220, 38, 38, 0.8));
+        }
+
+        .validation-score {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #fff;
+            display: block;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .validation-label {
+            font-size: 0.95em;
+            color: #f4f4f4;
+            margin-top: 5px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-top: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-badge.valid {
+            background: linear-gradient(45deg, #22c55e, #16a34a);
+            color: #fff;
+        }
+
+        .status-badge.partial {
+            background: linear-gradient(45deg, #fbbf24, #f59e0b);
+            color: #000;
+        }
+
+        .status-badge.invalid {
+            background: linear-gradient(45deg, #ef4444, #dc2626);
+            color: #fff;
+        }
+
+        .evaluation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .eval-item {
+            background: linear-gradient(135deg, rgba(42, 157, 143, 0.8), rgba(38, 70, 83, 0.8));
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease;
+        }
+
+        .eval-item:hover {
+            transform: translateY(-3px);
+        }
+
+        .eval-score {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #56d8ff;
+            display: block;
+        }
+
+        .eval-label {
+            font-size: 0.95em;
+            color: #f4f4f4;
+            margin-top: 5px;
+        }
+
+        .feedback-section {
+            background: linear-gradient(135deg, rgba(230, 57, 70, 0.8), rgba(243, 156, 18, 0.8));
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+        }
+
+        .feedback-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feedback-text {
+            font-size: 0.95em;
+            line-height: 1.6;
+            color: #f4f4f4;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .correct-answer-section {
+            background: rgba(34, 197, 94, 0.15);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #22c55e;
+            margin-bottom: 20px;
+        }
+
+        .correct-answer-section .answer-label {
+            color: #22c55e;
+        }
+
+        .fillers-section {
+            background: rgba(243, 156, 18, 0.2);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #f39c12;
+            margin-top: 15px;
+        }
+
+        .video-transcript {
+            background: rgba(86, 216, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #56d8ff;
+            margin-bottom: 15px;
+            font-size: 0.95em;
+        }
+
+        .actions {
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, #e63946, #f39c12);
+            color: #fff;
+            font-weight: bold;
+            padding: 12px 25px;
+            font-size: 1em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin: 5px 10px;
+        }
+
+        .btn:hover {
+            background: linear-gradient(45deg, #d62828, #f77f00);
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #2a9d8f, #264653);
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(45deg, #1b7f6a, #1d3557);
+        }
+
+        .loading {
+            text-align: center;
+            font-size: 1em;
+            color: #56d8ff;
+        }
+
+        .icon {
+            font-size: 1.2em;
+        }
+
+        /* Mobile responsiveness */
+        @media screen and (max-width: 600px) {
+            body {
+                padding: 15px;
+            }
+            h1 {
+                font-size: 1.8em;
+                margin-bottom: 25px;
+            }
+            .result-card {
+                padding: 15px;
+                border-radius: 12px;
+            }
+            .question-text {
+                font-size: 1.1em;
+            }
+            .answer-text, .video-transcript, .feedback-text, .fillers-section {
+                font-size: 0.9em;
+                padding: 10px;
+            }
+            .validation-score {
+                font-size: 2em;
+            }
+            .eval-score {
+                font-size: 1.5em;
+            }
+            .btn {
+                padding: 10px 18px;
+                font-size: 0.95em;
+            }
+            .validation-section, .evaluation-grid {
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            }
+            .status-badge {
+                font-size: 0.9em;
+                padding: 6px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Interview Results</h1>
+        
+        <div id="loadingMessage" class="loading">
+            <p>Loading your results...</p>
+        </div>
+        
+        <div id="resultsContent" style="display: none;">
+            <!-- Question Section -->
+            <div class="result-card">
+                <div class="question-section">
+                    <div class="question-text" id="questionDisplay">
+                        <!-- Question will be inserted here -->
+                    </div>
+                </div>
+                
+                <!-- Answer Section -->
+                <div class="answer-section">
+                    <span class="answer-label">Your Answer:</span>
+                    <div class="answer-text" id="userAnswerDisplay">
+                        <!-- User answer will be inserted here -->
+                    </div>
+                </div>
+                
+                <!-- Video Transcript (if applicable) -->
+                <div id="transcriptSection" class="video-transcript" style="display: none;">
+                    <span class="answer-label">📹 Video Transcript:</span>
+                    <div class="answer-text" id="transcriptDisplay">
+                        <!-- Transcript will be inserted here -->
+                    </div>
+                </div>
+                
+                <!-- Text/Speech Answer Validation Section -->
+                <div id="textValidationSection" style="display: none;">
+                    <div class="validation-section">
+                        <div class="validation-item" id="validationScoreCard">
+                            <span class="validation-score" id="validationScoreDisplay">--</span>
+                            <div class="validation-label">Answer Score</div>
+                            <div class="status-badge" id="statusBadge">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Correct Answer Section -->
+                    <div id="correctAnswerSection" class="correct-answer-section" style="display: none;">
+                        <span class="answer-label">✅ Recommended Answer:</span>
+                        <div class="answer-text" id="correctAnswerDisplay">
+                            <!-- Correct answer will be inserted here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Feedback Section -->
+                    <div class="feedback-section" id="feedbackSection" style="display: none;">
+                        <div class="feedback-title">
+                            <span class="icon">💡</span>
+                            <span>AI Feedback & Recommendations</span>
+                        </div>
+                        <div class="feedback-text" id="feedbackText">
+                            <!-- Feedback will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Video Answer Evaluation Section -->
+                <div id="videoValidationSection" class="evaluation-grid" style="display: none;">
+                    <!-- Video scores will be inserted here dynamically -->
+                </div>
+                
+                <!-- Fillers Section -->
+                <div id="fillersSection" class="fillers-section" style="display: none;">
+                    <span class="answer-label">🎤 Fillers Detected:</span>
+                    <div class="feedback-text" id="fillersDisplay">
+                        <!-- Fillers will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <div class="actions">
+            <a href="/questions" class="btn btn-secondary">← Back to Questions</a>
+            <button onclick="window.print()" class="btn">🖨️ Print Results</button>
+            <a href="/" class="btn">🏠 Start New Interview</a>
+        </div>
+    </div>
+
+    <script>
+        function displayResults() {
+            const resultData = sessionStorage.getItem('interviewResult');
+            
+            if (resultData) {
+                const data = JSON.parse(resultData);
+                populateResults(data);
+                document.getElementById('loadingMessage').style.display = 'none';
+                document.getElementById('resultsContent').style.display = 'block';
+                
+                // Keep result data for print functionality
+                // sessionStorage.removeItem('interviewResult');
+            } else {
+                setTimeout(() => { window.location.href = '/questions'; }, 2000);
+            }
+        }
+        
+        function populateResults(data) {
+            // Display question
+            const question = sessionStorage.getItem('currentQuestion') || 'Interview Question';
+            document.getElementById('questionDisplay').textContent = question;
+            
+            // Display user answer
+            const userAnswer = data.user_answer || 'Answer submitted';
+            document.getElementById('userAnswerDisplay').textContent = userAnswer;
+            
+            // Check if this is a video answer (has extra_scores) or text/speech answer
+            const isVideoAnswer = data.extra_scores !== undefined;
+            
+            if (isVideoAnswer) {
+                // Video answer with unified format
+                handleVideoAnswerUnified(data);
+            } else {
+                // Text/Speech answer
+                handleTextSpeechAnswer(data);
+            }
+            
+            // Handle fillers
+            displayFillers(data);
+        }
+
+        function handleVideoAnswerUnified(data) {
+            document.getElementById('textValidationSection').style.display = 'block';
+            
+            const validation = data.validation_result?.validation || 'Invalid';
+            const feedback = data.validation_result?.feedback || '';
+            const correctAnswer = data.validation_result?.correct_answer || '';
+            
+            // Get score from backend
+            let score = data.validation_result?.score || 0;
+            let scoreClass = '';
+            
+            // Determine color class based on score
+            if (score > 75) {
+                scoreClass = 'valid';
+            } else if (score >= 30) {
+                scoreClass = 'partial';
+            } else {
+                scoreClass = 'invalid';
+            }
+            
+            // Display validation score
+            const scoreCard = document.getElementById('validationScoreCard');
+            scoreCard.className = `validation-item ${scoreClass}`;
+            document.getElementById('validationScoreDisplay').textContent = `${score}%`;
+            
+            // Display status badge
+            const statusBadge = document.getElementById('statusBadge');
+            statusBadge.textContent = validation;
+            statusBadge.className = `status-badge ${scoreClass}`;
+            
+            // Display correct answer if score is not perfect
+            if (correctAnswer && score <= 75 && correctAnswer !== 'Transcription unavailable') {
+                document.getElementById('correctAnswerSection').style.display = 'block';
+                document.getElementById('correctAnswerDisplay').textContent = correctAnswer;
+            }
+            
+            // Display feedback
+            if (feedback) {
+                document.getElementById('feedbackSection').style.display = 'block';
+                document.getElementById('feedbackText').textContent = feedback;
+            }
+            
+            // Display EXTRA video-specific scores
+            if (data.extra_scores) {
+                const extraScoresSection = document.createElement('div');
+                extraScoresSection.className = 'video-extra-scores';
+                extraScoresSection.style.marginTop = '20px';
+                extraScoresSection.innerHTML = `
+                    <div style="background: rgba(86, 216, 255, 0.15); padding: 20px; border-radius: 12px; border-left: 4px solid #56d8ff; margin-bottom: 20px;">
+                        <h3 style="color: #56d8ff; margin: 0 0 15px 0; font-size: 1.2em;">📹 Video Analysis Breakdown</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.8em; font-weight: bold; color: #56d8ff;">${(data.extra_scores.confidence_score * 100).toFixed(1)}%</div>
+                                <div style="color: #f4f4f4; margin-top: 5px;">Confidence</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.8em; font-weight: bold; color: #56d8ff;">${(data.extra_scores.content_relevance * 100).toFixed(1)}%</div>
+                                <div style="color: #f4f4f4; margin-top: 5px;">Relevance</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 1.8em; font-weight: bold; color: #56d8ff;">${(data.extra_scores.fluency_score * 100).toFixed(1)}%</div>
+                                <div style="color: #f4f4f4; margin-top: 5px;">Fluency</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Insert after feedback section or before fillers
+                const feedbackSection = document.getElementById('feedbackSection');
+                const fillersSection = document.getElementById('fillersSection');
+                if (feedbackSection.style.display !== 'none') {
+                    feedbackSection.insertAdjacentElement('afterend', extraScoresSection);
+                } else if (fillersSection.parentElement) {
+                    fillersSection.parentElement.insertBefore(extraScoresSection, fillersSection);
+                } else {
+                    document.querySelector('.result-card').appendChild(extraScoresSection);
+                }
+            }
+        }
+
+        function handleTextSpeechAnswer(data) {
+            document.getElementById('textValidationSection').style.display = 'block';
+            
+            const validation = data.validation_result?.validation || 'Invalid';
+            const feedback = data.validation_result?.feedback || '';
+            const correctAnswer = data.validation_result?.correct_answer || '';
+            
+            // Get score from backend (ranges: Valid: 76-100, Partial: 30-75, Invalid: 0-29)
+            let score = data.validation_result?.score || 0;
+            let scoreClass = '';
+            
+            // Determine color class based on score
+            if (score > 75) {
+                scoreClass = 'valid';
+            } else if (score >= 30) {
+                scoreClass = 'partial';
+            } else {
+                scoreClass = 'invalid';
+            }
+            
+            // Display validation score
+            const scoreCard = document.getElementById('validationScoreCard');
+            scoreCard.className = `validation-item ${scoreClass}`;
+            document.getElementById('validationScoreDisplay').textContent = `${score}%`;
+            
+            // Display status badge
+            const statusBadge = document.getElementById('statusBadge');
+            statusBadge.textContent = validation;
+            statusBadge.className = `status-badge ${scoreClass}`;
+            
+            // Display correct answer (if available and not perfect score)
+            if (correctAnswer && score <= 75) {
+                document.getElementById('correctAnswerSection').style.display = 'block';
+                document.getElementById('correctAnswerDisplay').textContent = correctAnswer;
+            }
+            
+            // Display feedback
+            if (feedback) {
+                document.getElementById('feedbackSection').style.display = 'block';
+                document.getElementById('feedbackText').textContent = feedback;
+            }
+        }
+
+        function handleVideoAnswer(data, userAnswer) {
+            // Display transcript if different from user answer
+            if (data.Transcript && data.Transcript !== userAnswer) {
+                document.getElementById('transcriptSection').style.display = 'block';
+                document.getElementById('transcriptDisplay').textContent = data.Transcript;
+            }
+            
+            // Display video evaluation scores
+            const scoresContainer = document.getElementById('videoValidationSection');
+            scoresContainer.style.display = 'grid';
+            scoresContainer.innerHTML = '';
+            
+            const scores = [
+                { label: 'Content Relevance', value: `${(data["Content Relevance"]*100).toFixed(1)}%` },
+                { label: 'Fluency Score', value: `${(data["Fluency Score"]*100).toFixed(1)}%` },
+                { label: 'Confidence Score', value: `${(data["Confidence Score"]*100).toFixed(1)}%` },
+                { label: 'Final Evaluation', value: `${data["Final Evaluation"]}%` }
+            ];
+            
+            scores.forEach(score => {
+                const scoreElement = document.createElement('div');
+                scoreElement.className = 'eval-item';
+                scoreElement.innerHTML = `
+                    <span class="eval-score">${score.value}</span>
+                    <div class="eval-label">${score.label}</div>
+                `;
+                scoresContainer.appendChild(scoreElement);
+            });
+        }
+
+        function displayFillers(data) {
+            const fillers = data.fillers_used;
+            if (fillers && fillers !== 'None' && fillers.length > 0) {
+                document.getElementById('fillersSection').style.display = 'block';
+                const fillersText = Array.isArray(fillers) ? fillers.join(', ') : fillers;
+                document.getElementById('fillersDisplay').textContent = fillersText || 'None detected';
+            }
+        }
+        
+        window.onload = displayResults;
+    </script>
+</body>
+</html>
