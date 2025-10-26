@@ -1,70 +1,57 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import google.generativeai as genai
 import os
-import secrets
-import re
-import json
+import speech_recognition as sr
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-import speech_recognition as sr
+import re
+import json
+import whisper
 
-# ============================================================
-# ===== Flask Setup =========================================
-# ============================================================
-app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-
-# ============================================================
-# ===== Gemini API ==========================================
-# ============================================================
-GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
-if not GOOGLE_API_KEY:
-    raise ValueError("❌ GOOGLE_API_KEY environment variable required!")
-
-genai.configure(api_key=GOOGLE_API_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash')
-
-# ============================================================
-# ===== Whisper Setup ========================================
-# ============================================================
-WHISPER_ENABLED = False
-whisper_model = None
-
+# Download NLTK data
 try:
-    import whisper
-    whisper_model = whisper.load_model("tiny", device="cpu", download_root="/tmp/whisper_cache")
-    WHISPER_ENABLED = True
-except Exception as e:
-    print(f"⚠️ Whisper not available: {e}")
-
-# ============================================================
-# ===== NLTK Setup ===========================================
-# ============================================================
-try:
+    nltk.download('punkt_tab', quiet=True)
     nltk.download('punkt', quiet=True)
     nltk.download('stopwords', quiet=True)
+    print("✅ NLTK data downloaded")
 except:
     pass
 
+app = Flask(__name__)
+app.secret_key = 'my_super_secret_key_456789'
+
+# Gemini API config
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY', 'AIzaSyACpD3waeAbKickkjJb7gBHqegPhGGB-VE')
+genai.configure(api_key=GOOGLE_API_KEY)
+model = genai.GenerativeModel('gemini-2.0-flash')
+
+# Load Whisper model at startup
+print("🔄 Loading Whisper tiny model...")
+model_whisper = whisper.load_model("tiny")
+print("✅ Whisper loaded!")
+
 # ============================================================
-# ===== Utility Functions ===================================
+# ===== Utility Functions ====================================
 # ============================================================
-def detect_fillers(text):
-    fillers = {"um", "uh", "like", "you know", "so", "actually", "basically", "literally", "well", "hmm"}
-    words = word_tokenize(text.lower())
-    used = [w for w in words if w in fillers]
-    return ", ".join(set(used)) if used else "None"
 
 def SpeechToText():
     r = sr.Recognizer()
     try:
         with sr.Microphone() as source:
+            print("Adjusting for ambient noise...")
             r.adjust_for_ambient_noise(source)
+            print("Listening...")
             audio = r.listen(source)
-        return r.recognize_google(audio, language='en-IN')
+        print("Recognizing...")
+        query = r.recognize_google(audio, language='en-IN')
+        return query
+    except sr.UnknownValueError:
+        return "Could not understand the audio."
+    except sr.RequestError as e:
+        return f"Could not request results from Google Speech Recognition service; {e}"
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Unexpected error: {str(e)}"
 
 def clean_answer(answer):
     try:
@@ -74,66 +61,110 @@ def clean_answer(answer):
     except:
         return answer
 
+def detect_fillers(text):
+    try:
+        common_fillers = {"um", "uh", "like", "you know", "so", "actually", "basically", "literally", "well", "hmm"}
+        words = word_tokenize(text.lower())
+        used_fillers = [w for w in words if w in common_fillers]
+        return ", ".join(set(used_fillers)) if used_fillers else "None"
+    except:
+        return "None"
+
 # ============================================================
 # ===== Routes ===============================================
 # ============================================================
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/generate_questions', methods=['POST'])
 def generate_questions():
-    job = request.form.get('job', '').strip()
-    level = request.form.get('level', 'medium')
-    if not job:
-        return jsonify({"error": "Job title required"}), 400
+    job = request.form['job']
+    level = request.form['level']
     session['job_title'] = job
     session['difficulty'] = level
     return redirect(url_for('regenerate_questions'))
 
 @app.route('/regenerate_questions')
 def regenerate_questions():
-    job = session.get('job_title', 'Software Developer')
-    level = session.get('difficulty', 'medium')
+    job = session.get('job_title')
+    level = session.get('difficulty')
 
     prompt = f"""
-Generate exactly 10 interview questions for the job role: {job} 
-with difficulty level: {level}. 
-Only return the 10 questions in plain text, numbered 1 to 10.
-Do not include any introduction or extra comments.
-"""
-    try:
-        response = model.generate_content(prompt)
-        raw_questions = response.text.strip().split("\n")
-        questions = [re.sub(r'^\d+[\).\s-]+', '', q).strip() for q in raw_questions if q.strip()]
-        session['questions'] = questions[:10]
-        session['results'] = []
-        return redirect(url_for('questions'))
-    except Exception as e:
-        return jsonify({"error": f"Failed to generate questions: {e}"}), 500
+    Generate exactly 10 interview questions for the job role: {job} 
+    with difficulty level: {level}. 
+    Only return the 10 questions in plain text, numbered 1 to 10. 
+    Do not include any introduction or extra comments.
+    """
+    response = model.generate_content(prompt)
+
+    raw_questions = response.text.strip().split("\n")
+    questions = []
+    for q in raw_questions:
+        match = re.match(r'^\d+[\).\s-]+(.*)', q.strip())
+        if match:
+            questions.append(match.group(1).strip())
+
+    questions = questions[:10]
+    session['questions'] = questions
+
+    return redirect(url_for('questions'))
 
 @app.route('/questions')
 def questions():
     questions = session.get('questions', [])
-    if not questions:
-        return redirect(url_for('index'))
-    return render_template('questions.html', questions=list(enumerate(questions, start=1)),
-                           job_title=session.get('job_title', 'N/A'),
-                           difficulty=session.get('difficulty', 'N/A'))
+    job = session.get('job_title')
+    difficulty = session.get('difficulty')
+    question_list = list(enumerate(questions, start=1))
+    return render_template('questions.html', questions=question_list, job_title=job, difficulty=difficulty)
 
 @app.route('/interview/<int:qid>')
 def interview(qid):
     questions = session.get('questions', [])
-    question = questions[qid-1] if 1 <= qid <= len(questions) else 'No question found'
+    if 1 <= qid <= len(questions):
+        question = questions[qid - 1]
+    else:
+        question = 'No question found'
     return render_template('interview.html', question=question, qid=qid)
+
+@app.route('/get_analysis', methods=['POST'])
+def get_analysis():
+    if 'audio' not in request.files:
+        return jsonify({"error": "No audio file"}), 400
+
+    audio_file = request.files['audio']
+    audio_path = "user_audio.wav"
+    audio_file.save(audio_path)
+
+    recognizer = sr.Recognizer()
+    try:
+        with sr.AudioFile(audio_path) as source:
+            audio = recognizer.record(source)
+        transcribed_text = recognizer.recognize_google(audio)
+        duration = 10
+    except sr.UnknownValueError:
+        return jsonify({"error": "Could not understand audio."}), 400
+    except sr.RequestError as e:
+        return jsonify({"error": f"Speech recognition failed: {e}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
+
+    return jsonify({
+        "transcription": transcribed_text,
+        "duration": duration
+    })
 
 @app.route('/submit_answer/<qid>', methods=['POST'])
 def submit_answer(qid):
     user_answer = request.form.get('answer', '').strip()
-    if not user_answer:
-        return jsonify({"error": "Answer required"}), 400
     questions = session.get('questions', [])
-    question_text = questions[int(qid)-1] if questions else "Interview question"
+    
+    # Get the actual question text
+    try:
+        question_text = questions[int(qid) - 1]
+    except:
+        question_text = "Interview question"
 
     prompt = f"""
 You are a strict technical interviewer evaluating an interview answer.
@@ -141,40 +172,58 @@ You are a strict technical interviewer evaluating an interview answer.
 Question: {question_text}
 User's Answer: "{user_answer}"
 
-Return ONLY valid JSON:
+EVALUATION RULES:
+- "Valid": Answer correctly addresses the question with accurate information
+- "Partial": Answer is somewhat related but incomplete or has errors
+- "Invalid": Answer is wrong, off-topic, nonsense, or gibberish
+
+Examples of INVALID:
+- Random words like "asdfgh xyz"
+- Completely wrong information
+- Off-topic answers
+
+Return ONLY valid JSON (no markdown):
 {{
     "correct_answer": "Brief ideal answer",
-    "validation": "Valid/Partial-High/Partial-Low/Invalid",
-    "score": 75,
+    "validation": "Valid/Invalid/Partial",
     "fillers_used": ["um", "like"],
     "feedback": "Brief explanation"
 }}
 """
     try:
         response = model.generate_content(prompt)
-        raw_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+        raw_text = response.text.strip()
+        # Remove markdown if present
+        raw_text = raw_text.replace('```json', '').replace('```', '').strip()
         json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-        result = json.loads(json_match.group()) if json_match else {}
-    except:
-        result = {"correct_answer":"N/A","validation":"Invalid","score":0,"feedback":"Error"}
+        if json_match:
+            json_str = json_match.group()
+            result = json.loads(json_str)
+        else:
+            raise ValueError("No JSON object found")
+    except Exception as e:
+        print(f"Error: {e}")
+        result = {
+            "correct_answer": "Unable to parse response.",
+            "validation": "Unknown",
+            "fillers_used": [],
+            "feedback": "N/A"
+        }
 
-    results = session.get('results', [])
-    results.append({
-        "Q.ID": qid,
-        "Question": question_text,
-        "User Answer": user_answer,
-        "Score": result.get('score',0),
-        "Validation": result.get('validation','Invalid'),
-        "Feedback": result.get('feedback',''),
-        "Fillers Used": result.get('fillers_used',[])
+    return jsonify({
+        'user_answer': user_answer,
+        'validation_result': {
+            'correct_answer': result.get('correct_answer', ''),
+            'validation': result.get('validation', ''),
+            'feedback': result.get('feedback', '')
+        },
+        'fillers_used': result.get('fillers_used', [])
     })
-    session['results'] = results
-
-    return jsonify(result)
 
 # ============================================================
-# ===== Video Interview ======================================
+# ===== Video Interview Routes ===============================
 # ============================================================
+
 @app.route('/video_interview')
 def video_interview():
     return render_template('video_interview.html')
@@ -182,101 +231,97 @@ def video_interview():
 @app.route('/submit_video_answer/<qid>', methods=['POST'])
 def submit_video_answer(qid):
     if 'video' not in request.files:
-        return jsonify({"error":"No video uploaded"}),400
+        return jsonify({"error": "No video uploaded"}), 400
+
     file = request.files['video']
-    os.makedirs("/tmp/uploads", exist_ok=True)
-    filepath = os.path.join("/tmp/uploads", f"answer_{qid}_{os.getpid()}.webm")
+    os.makedirs("uploads", exist_ok=True)
+    filepath = os.path.join("uploads", f"answer_{qid}.webm")
     file.save(filepath)
+    
+    print(f"📹 Processing video for Q{qid}")
 
-    transcript = "Transcription unavailable"
-    if WHISPER_ENABLED and whisper_model:
-        try:
-            result = whisper_model.transcribe(filepath, fp16=False)
-            transcript = result.get('text','').strip()
-        except:
-            transcript = "Transcription failed"
+    # Get question
+    questions = session.get('questions', [])
+    try:
+        question_text = questions[int(qid) - 1]
+    except:
+        question_text = "Interview question"
 
-    # Evaluate with Gemini if transcript valid
-    validation_result = {
-        "correct_answer": "",
-        "validation": "Invalid",
-        "score": 0,
-        "feedback": "",
-        "confidence_score": 0.0,
-        "content_relevance": 0.0,
-        "fluency_score": 0.0
-    }
+    # Step 1: Transcribe using Whisper
+    try:
+        print("🎤 Transcribing...")
+        result = model_whisper.transcribe(filepath, fp16=False)
+        transcript = result['text'].strip()
+        print(f"✅ Transcript: {transcript[:100]}")
+    except Exception as e:
+        print(f"❌ Transcription error: {e}")
+        transcript = f"Transcription failed: {str(e)}"
 
-    if transcript and len(transcript)>5:
-        try:
-            prompt = f"""
-You are a strict technical interviewer evaluating a VIDEO interview answer.
+    # Step 2: Evaluate with Gemini
+    prompt = f"""
+You are an expert interviewer analyzing a video interview answer.
 
-Question: {session.get('questions',[qid])[int(qid)-1]}
+Question: {question_text}
 User's Answer (from video): "{transcript}"
 
-Provide COMPLETE evaluation in JSON format:
+Evaluate with these scores (0.0 to 1.0):
+- Confidence Score: Speaker's clarity and confidence
+- Content Relevance: How well it addresses the question
+- Fluency Score: Language fluency and coherence
+
+Return ONLY valid JSON (no markdown):
 {{
-    "correct_answer": "Brief ideal answer to the question",
-    "validation": "Valid/Partial-High/Partial-Low/Invalid",
-    "score": 75,
-    "feedback": "2-3 sentences explaining the evaluation",
-    "confidence_score": 0.8,
-    "content_relevance": 0.7,
-    "fluency_score": 0.9
+    "Confidence Score": 0.8,
+    "Content Relevance": 0.7,
+    "Fluency Score": 0.9
 }}
 """
-            response = model.generate_content(prompt)
-            raw_text = response.text.strip().replace('```json','').replace('```','').strip()
-            json_match = re.search(r'\{.*?\}', raw_text, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
-                validation_result.update(result)
-        except Exception as e:
-            validation_result['feedback'] = f"Evaluation error: {e}"
 
-    results = session.get('results', [])
-    results.append({
-        "Q.ID": qid,
-        "Question": session.get('questions',[qid])[int(qid)-1],
-        "User Answer": transcript,
-        "Score": validation_result.get('score',0),
-        "Validation": validation_result.get('validation','Invalid'),
-        "Feedback": validation_result.get('feedback',''),
-        "Confidence Score": validation_result.get('confidence_score',0),
-        "Content Relevance": validation_result.get('content_relevance',0),
-        "Fluency Score": validation_result.get('fluency_score',0)
-    })
-    session['results'] = results
+    try:
+        response = model.generate_content(prompt)
+        raw_text = response.text.strip()
+        raw_text = raw_text.replace('```json', '').replace('```', '').strip()
+        json_match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group()
+            scores = json.loads(json_str)
+        else:
+            scores = {
+                "Confidence Score": 0.7,
+                "Content Relevance": 0.7,
+                "Fluency Score": 0.7
+            }
+    except Exception as e:
+        print(f"❌ Evaluation error: {e}")
+        scores = {
+            "Confidence Score": 0.7,
+            "Content Relevance": 0.7,
+            "Fluency Score": 0.7
+        }
 
-    os.remove(filepath)
+    # Calculate final score
+    try:
+        final_eval = round(
+            (scores["Confidence Score"] +
+             scores["Content Relevance"] +
+             scores["Fluency Score"]) / 3 * 100, 2
+        )
+    except:
+        final_eval = 70.0
+
+    print(f"📊 Final: {final_eval}%")
+
     return jsonify({
-        "user_answer": transcript,
-        "validation_result": validation_result,
-        "fillers_used": detect_fillers(transcript).split(', ')
+        "Confidence Score": scores["Confidence Score"],
+        "Content Relevance": scores["Content Relevance"],
+        "Fluency Score": scores["Fluency Score"],
+        "Final Evaluation": final_eval,
+        "Transcript": transcript
     })
 
-# ============================================================
-# ===== Results & Health =====================================
-# ============================================================
 @app.route('/result')
 def result():
-    return render_template('result.html', results=session.get('results',[]),
-                           job_title=session.get('job_title','N/A'),
-                           difficulty=session.get('difficulty','N/A'))
-
-@app.route('/get_results')
-def get_results():
-    return jsonify(session.get('results',[]))
-
-@app.route('/health')
-def health():
-    return jsonify({
-        "status":"healthy",
-        "whisper_enabled":WHISPER_ENABLED,
-        "whisper_loaded":whisper_model is not None,
-        "api_configured": bool(GOOGLE_API_KEY)
-    })
+    return render_template('result.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
