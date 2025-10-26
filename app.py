@@ -28,7 +28,7 @@ model = genai.GenerativeModel('gemini-2.0-flash')
 
 # Load Whisper model at startup
 print("🔄 Loading Whisper tiny model...")
-model_whisper = whisper.load_model("tiny")
+model_whisper = whisper.load_model("tiny", download_root="/tmp/whisper_cache")
 print("✅ Whisper loaded!")
 
 # ============================================================
@@ -234,8 +234,8 @@ def submit_video_answer(qid):
         return jsonify({"error": "No video uploaded"}), 400
 
     file = request.files['video']
-    os.makedirs("uploads", exist_ok=True)
-    filepath = os.path.join("uploads", f"answer_{qid}.webm")
+    os.makedirs("/tmp/uploads", exist_ok=True)
+    filepath = os.path.join("/tmp/uploads", f"answer_{qid}.webm")
     file.save(filepath)
     
     print(f"📹 Processing video for Q{qid}")
